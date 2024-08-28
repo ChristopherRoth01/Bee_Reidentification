@@ -1,0 +1,11 @@
+# Ignore the data directory
+data/
+results/
+train_data/
+# Ignore __pycache__ directories
+__pycache__/
+
+logs/
+
+lightning_logs
+
