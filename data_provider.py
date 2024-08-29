@@ -49,56 +49,11 @@ def train_valid_split_df(df, train_frac=0.8):
     valid_df = df[~df.label.isin(train_labels)]
     return train_df, valid_df
 
-def load_torch_track_dataset(df, track_len=5, rescale_factor=1, image_augmentation=False, censored=True, label_column="track_tag_id", batch_size=32, shuffle=True, num_workers=4):
-    dataset = TrackDataset(df, track_len=track_len, rescale_factor=rescale_factor, image_augmentation=image_augmentation, censored=censored, label_column=label_column)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
-    return dataloader
 
 def load_torch_dataset(df, track_len=5, rescale_factor=1, image_augmentation=False, censored=True, label_column="track_tag_id", batch_size=256, shuffle=True, num_workers=6):
     dataset = NonTrackDataset(df,  rescale_factor=rescale_factor, image_augmentation=image_augmentation, censored=censored, label_column=label_column)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
     return dataloader
-
-
-
-
-# Example usage
-# df = pd.read_csv("path/to/your/data.csv")  # Load your DataFrame
-# dataloader = load_torch_track_dataset(df)
-
-# Iterate through the dataloader
-# for batch in dataloader:
-#     images, labels = batch
-#     # Do something with images and labels
-def get_track_dataset(dataset, augmentation=False, track_len=4):
-    
-    if dataset == "untagged":
-        label_column = "label"
-        dataset_filename = "data/short_term_train.csv"
-        untagged_df = pd.read_csv(dataset_filename)
-        train_df, valid_df = train_valid_split_df(untagged_df, train_frac=0.8)
-        train_df = prepare_for_triplet_loss_track(train_df, track_len=track_len, label=label_column)
-        valid_df = prepare_for_triplet_loss_track(valid_df, track_len=track_len, label=label_column)
-        
-    elif dataset == "tagged":
-        label_column = "track_tag_id"
-        train_csv, valid_csv ="data/long_term_train.csv","data/long_term_valid.csv"
-        train_df = pd.read_csv(train_csv)
-        train_df = prepare_for_triplet_loss_track(train_df, label=label_column, track_len=track_len)
-        valid_df = pd.read_csv(valid_csv)
-        valid_df = prepare_for_triplet_loss_track(valid_df, label=label_column, track_len=track_len)
-        
-    
-    train_dataset, valid_dataset = load_dataset_track(train_df, valid_df, track_len=track_len, augmentation=augmentation,  label_column="label", shuffle=False)
-    return train_dataset, valid_dataset
-
-def load_dataset_track(train_df, valid_df, track_len=4, augmentation=False, label_column="label", shuffle=True):
-    
-    train_dataset = load_torch_track_dataset(train_df, rescale_factor=4, track_len=track_len, label_column=label_column)
-    valid_dataset = load_torch_track_dataset(valid_df, rescale_factor=4, track_len=track_len, label_column=label_column)
-    
-    return train_dataset, valid_dataset
-
 
 
 def prepare_for_triplet_loss(df, label="label"):

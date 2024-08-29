@@ -56,37 +56,6 @@ def split_query_gallery(predictions):
     gallery = predictions[1:]
     return query, gallery
 
-def calculate_rank(query, query_df, vdf, gallery_size=10):
-    
-    query_gallery =  get_query_gallery(query, query_df, vdf, limit=gallery_size)
-    
-    images = filename2image(query_gallery)
-    
-    pred = model.predict(images.batch(32))
-    
-    query, gallery = split_query_gallery(pred)
-
-    dist = compute_distance(query, gallery)
-    rank = compute_rank(dist)
-    
-    return rank
-
-
-def average_precision(vdf, gallery_size=10):
-
-    query_df = vdf.groupby("track_tag_id").filter(lambda x: len(x["global_track_id"].unique()) > 1)
-
-    queries = query_df.groupby("track_tag_id").sample()
-
-    accs = list()
-    
-    for i, query in queries.iterrows():
-        rank = calculate_rank(query, query_df, vdf, gallery_size=gallery_size)
-        accs.append(np.array([rank < 1, rank < 5]))
-    accs = np.array(accs)
-    return np.mean(accs, axis=0)
-
-
 def split_queries_galleries(predictions):
     queries_emb = list()
     galleries_emb = list()
@@ -99,7 +68,7 @@ def split_queries_galleries(predictions):
 
 def cmc_evaluation(model, df, iterations=100, gallery_size=10):
     """
-    model: keras model
+    model: Torch model
     df: a dataframe with the image to evaluate
     
     """
@@ -191,83 +160,10 @@ def plot_query_gallery(query_gallery, dist=None, limit=67):
             if dist is not None:
                 ax[i].set_xlabel("{:.9f}".format(dist[0][i-1]))
                 
-def plot_query_sensitivity_gallery(query_gallery, s, dist=None, limit=67):
-    rows = int(np.ceil(limit/12.0))
-    fig, ax = plt.subplots(rows, 12, figsize=(20, 15))
-    
-    ax = ax.ravel()
-    
-    for i, (image, smap) in enumerate(zip(query_gallery, s)):
-        ax[i].imshow(image)
-        ax[i].imshow(smap, alpha=0.4)
-        ax[i].set_yticks([])
-        ax[i].set_xticks([])
-        if i == 0:
-            ax[i].set_title("Query")
-            ax[i].spines['bottom'].set_color('red')
-            ax[i].spines['top'].set_color('red') 
-            ax[i].spines['right'].set_color('red')
-            ax[i].spines['left'].set_color('red')
-            if dist is not None:
-                ax[i].set_xlabel("Rank : {}".format(compute_rank(dist)))
-        elif i == 1:
-            ax[i].set_title("Key")
-            ax[i].spines['bottom'].set_color('green')
-            ax[i].spines['top'].set_color('green') 
-            ax[i].spines['right'].set_color('green')
-            ax[i].spines['left'].set_color('green')
-            if dist is not None:
-                ax[i].set_xlabel("{:.5f}".format(dist[0][i-1]))
-        else:
-            ax[i].set_title("Distractor")
-            if dist is not None:
-                ax[i].set_xlabel("{:.9f}".format(dist[0][i-1]))
-        
-
-        
-
-def get_interactive_plot_query_gallery(model, df):
-    cdf = df.copy()
-    query_df = cdf.groupby("track_tag_id").filter(lambda x: len(x["global_track_id"].unique()) > 1)
-    queries_ids = query_df.track_tag_id.unique()
-    queries_len = len(queries_ids)
-
-    @interact
-    def _interactive_plot_query_gallery(query_id=(0, queries_len + 1), save=False, filename=""):
-        queries = query_df.groupby("track_tag_id").sample()
-        query_data = queries.iloc[query_id]
-        grouped = cdf.groupby("track_tag_id")
-
-        query_gallery =  get_query_gallery(query_data, query_df, grouped, limit=10)
-
-        images = filename2image(query_gallery)
-
-        pred = model.predict(images.batch(32))
-
-        query, gallery = split_query_gallery(pred)
-
-        dist = compute_distance(query, gallery)
-
-        plot_query_gallery(images, dist, limit=10)
-        
-        if save and filename != "":
-            plt.tight_layout()
-            plt.savefig(filename)
-
-        s = list()
-        for i in images:
-            s.append(sensitivity_map(model, i.numpy(), occlude_size=8))
-        plot_query_sensitivity_gallery(images, s, dist, limit=10)
-
-        if save and filename != "":
-            folder, file = os.path.split(filename)
-            filename = os.path.join(folder, "sm_" + file)
-            plt.tight_layout()
-            plt.savefig(filename)
 
 def random_eval_df(df,n_distractors,image_size = (128,128)):
     """
-    model: keras model
+    model: torch model
     df: a dataframe with the image to evaluate
     
     """
@@ -276,8 +172,6 @@ def random_eval_df(df,n_distractors,image_size = (128,128)):
     dataset = filename2image_set(queries_and_galleries, rescale_factor=4, image_size=image_size,num_workers=6)
     batch_size = n_distractors+2
     dataloader= DataLoader(dataset, batch_size=batch_size,prefetch_factor=5,num_workers=6,shuffle=False)
-     
-    predictions = []       
     preds_l=[]
     
     preds = np.array(preds_l)
@@ -319,10 +213,8 @@ def cmc_evaluation_df(model, df, image_size = (128,128), white=False, small_scal
     queries_and_galleries = df.filename.values
     
     model.eval()   
-    trainer = L.Trainer()
     dataset = filename2image_set(queries_and_galleries, rescale_factor=4, image_size=image_size,num_workers=6,white=white,small_scale=small_scale)
         
-    
     batch_size = 256
     dataloader= DataLoader(dataset, batch_size=batch_size,prefetch_factor=5,num_workers=6)
     model.eval()   

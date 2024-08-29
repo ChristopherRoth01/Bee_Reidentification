@@ -5,7 +5,7 @@ import pytorch_lightning as pl
 from triplet_loss import TripletLoss
 
 class SimpleCNNv2(nn.Module):
-    def __init__(self, input_shape=(3, 400, 200), conv_blocks=2, latent_dim=256, l2_norm=True, dropout=True):
+    def __init__(self, input_shape=(3, 56, 56), conv_blocks=2, latent_dim=128, l2_norm=True, dropout=True):
         super(SimpleCNNv2, self).__init__()
         self.conv_blocks = conv_blocks
         self.l2_norm = l2_norm
@@ -210,7 +210,7 @@ class TrackModel(pl.LightningModule):
         x = self.l2_normalize(x)
         return x
     
-    def training_step(self,batch,batch_idx):
+    def training_step(self, batch, batch_idx):
         inputs, targets = batch
         outputs = self(inputs)
         loss = self.track_distance_loss(outputs)
@@ -231,81 +231,3 @@ class TrackModel(pl.LightningModule):
         return optimizer
     
     
-    
-class SimpleCNNv2LightningLarge(pl.LightningModule):
-    def __init__(self, input_shape=(3, 224, 224), conv_blocks=8, latent_dim=128, l2_norm=True, dropout=True, lr=0.001,loss_fn = TripletLoss(device="cuda")):
-        super(SimpleCNNv2LightningLarge, self).__init__()
-        self.conv_blocks = conv_blocks
-        self.l2_norm = l2_norm
-        self.dropout = dropout
-        self.lr = lr
-        self.loss_fn = loss_fn
-        self.conv1 = nn.Conv2d(in_channels=input_shape[0], out_channels=128, kernel_size=7, padding=3)
-        self.bn1 = nn.BatchNorm2d(128)
-        self.conv2 = nn.Conv2d(128, 256, kernel_size=3, padding=1)
-        self.bn2 = nn.BatchNorm2d(256)
-        self.conv3 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
-
-        self.conv_block_layers = nn.ModuleList()
-        for _ in range(conv_blocks - 1):
-            block = nn.ModuleDict({
-                'pool': nn.MaxPool2d(2, 2),
-                'bn1': nn.BatchNorm2d(256),
-                'conv1': nn.Conv2d(256, 256, kernel_size=3, padding=1),
-                'bn2': nn.BatchNorm2d(64),
-                'conv2': nn.Conv2d(256, 256, kernel_size=3, padding=1),
-            })
-            self.conv_block_layers.append(block)
-
-        self.flatten = nn.Flatten()
-        self.fc = nn.Linear(256 * (input_shape[1] // (2**(conv_blocks - 1))) * (input_shape[2] // (2**(conv_blocks - 1))), latent_dim)
-        self.dropout1 = nn.Dropout(0.5)
-        self.dropout2 = nn.Dropout(0.2)
-
-    def forward(self, x):
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
-        x = self.conv3(x)
-        for i in range(self.conv_blocks - 1):
-            block = self.conv_block_layers[i]
-            xp = block['pool'](x)
-            x = F.relu(block['bn1'](xp))
-            x = F.relu(block['bn2'](block['conv1'](x)))
-            x = block['conv2'](x)
-            x = xp + x
-        
-        x = self.flatten(x)
-        if self.dropout:
-            x = self.dropout1(x)
-        x = self.fc(x)
-        if self.dropout:
-            x = self.dropout2(x)
-        if self.l2_norm:
-            x = F.normalize(x, p=2, dim=1)
-        return x
-
-    def training_step(self, batch, batch_idx):
-        x, y = batch
-        y_hat = self(x)
-        loss = self.loss_fn(y_hat, y)
-        self.log('train_loss',loss)
-        print('train_loss', loss)
-        return loss
-
-    def validation_step(self, batch, batch_idx):
-        x, y = batch
-        y_hat = self(x)
-        loss = self.loss_fn(y_hat, y)
-        self.log('val_loss', loss)
-        return loss
-
-    def test_step(self, batch, batch_idx):
-        x, y = batch
-        y_hat = self(x)
-        loss = self.loss_fn(y_hat, y)
-        self.log('test_loss', loss)
-        return loss
-
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
-        return optimizer
